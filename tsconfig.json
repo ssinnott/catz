@@ -1,0 +1,28 @@
+{
+  // Type checking only, exactly as in game-engine: tsc never writes a byte. tools/server.ts strips
+  // types one file per request for `npm run dev`, tools/build.ts bundles dist/index.html, and Node 22
+  // runs the tools by stripping types natively. Import specifiers name the real '.ts' file on disk,
+  // which is what `allowImportingTsExtensions` (legal only under `noEmit`) is for -- see
+  // src/lib's own tsconfig notes in the game-engine repository.
+  //
+  // Strict from the first line: this is a new game with no migration debt, and the vendored
+  // library under src/lib/ is already clean under strict.
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "tools/**/*.ts",
+    "types/**/*.d.ts"
+  ]
+}
