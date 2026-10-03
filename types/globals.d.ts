@@ -20,6 +20,12 @@ interface CatzTestHooks {
   goto?: (name: string, arg?: string) => void;
   /** A read-only peek at game state for assertions. */
   peek?: () => Record<string, unknown>;
+  /** Test-only shortcuts on the screen on top (warp the cat, skip a scene). */
+  cheat?: (cmd: string) => void;
+  /** Fill the current cat's food, drink and play. */
+  fill?: () => void;
+  /** Render every sound effect and track offline and measure them. */
+  audioSelfTest?: () => Promise<unknown>;
 }
 
 interface Window {

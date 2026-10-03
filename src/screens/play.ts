@@ -23,9 +23,10 @@ export class PlayScreen implements Screen {
   }
 
   private finish(r: StageResult): void {
-    // a challenge works up an appetite: one food and one drink used up, whatever happened
+    // a challenge works up an appetite (and wears a cat out): one of each need used up
     save.addNeed(this.cat, 'food', -1);
     save.addNeed(this.cat, 'drink', -1);
+    save.addNeed(this.cat, 'play', -1);
     screens.go(nav.results(this.level, this.cat, r), { at: this.stage.catOnScreen() });
   }
 
@@ -57,6 +58,18 @@ export class PlayScreen implements Screen {
     s.player.placeAt(r.x, r.y, r.facing);
     s.flock?.gather(r.x, r.y);
     s.cam.snapTo(r.x + 40, r.y - 50);
+  }
+
+  /** Test hooks: `warp:x,y` (tiles), `goal` (just short of the goal), `skip` (end the intro). */
+  cheat(cmd: string): void {
+    const s = this.stage, p = s.player;
+    const [k, v] = cmd.split(':');
+    if (k === 'skip') { s.director.cancel(); p.script(false); }
+    if (k === 'warp') { const [x, y] = v.split(',').map(Number); p.placeAt((x + 0.5) * 24, (y + 1) * 24, 1); s.cam.snapTo(p.feetX, p.feetY); }
+    if (k === 'goal') {
+      const g = s.lv.spawns.find((sp) => sp.kind === 'goal');
+      if (g) { p.placeAt(g.x - 60, g.y, 1); s.cam.snapTo(p.feetX, p.feetY); }
+    }
   }
 
   peek(): Record<string, unknown> {

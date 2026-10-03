@@ -57,8 +57,15 @@ hooks.tap = (action: string) => { if ((ACTIONS as readonly string[]).includes(ac
 hooks.tapAt = (x: number, y: number) => input.forcePointer(x, y);
 hooks.goto = (name: string, arg?: string) => screens.go(makeScreen(name, arg ?? null), { kind: 'cut' });
 Object.defineProperty(hooks, 'screen', { get: () => screens.top?.name ?? '', configurable: true });
+hooks.cheat = (cmd: string) => {
+  const top = screens.top as unknown as { cheat?: (c: string) => void } | null;
+  top?.cheat?.(cmd);
+};
+hooks.fill = () => { const c = save.data.cat; save.addNeed(c, 'food', 3); save.addNeed(c, 'drink', 3); save.addNeed(c, 'play', 3); };
 hooks.peek = () => {
   const top = screens.top as unknown as { peek?: () => Record<string, unknown> } | null;
   return { screen: screens.top?.name ?? '', busy: screens.busy, ...(top?.peek ? top.peek() : {}) };
 };
+/** Render every sound and track offline and measure it (the engine's audio self-test). */
+hooks.audioSelfTest = () => audio.selfTest({ sfxSeconds: 1.2, musicSeconds: 2 });
 hooks.ready = true;

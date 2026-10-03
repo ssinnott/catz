@@ -37,8 +37,10 @@ export function makeScreen(name: string, arg: string | null = null): Screen {
     case 'map': return nav.map(save.data.cat);
     case 'fishing': return nav.fishing(catArg(arg));
     case 'play': {
-      const id = (LEVEL_IDS as readonly string[]).includes(arg ?? '') ? arg as LevelId : 'town';
-      return nav.play(id, save.data.cat);
+      // 'town', or 'town:sly' to play it as a particular cat
+      const [lv, c] = (arg ?? '').split(':');
+      const id = (LEVEL_IDS as readonly string[]).includes(lv) ? lv as LevelId : 'town';
+      return nav.play(id, c ? catArg(c) : save.data.cat);
     }
     case 'results': {
       const lv = LEVELS.town;

@@ -426,7 +426,7 @@ export class Stage {
       if (c.active || !overlaps(pb, c.box())) continue;
       for (const o of this.checkpoints) if (o.index < c.index) o.active = true;
       c.activate();
-      this.respawn = { x: c.x, y: c.y, facing: 1 };
+      this.respawn = { x: c.x + 20, y: c.y, facing: 1 };
       sfx('checkpoint');
       this.parts.text(c.x, c.y - 70, 'CHECKPOINT!', UI.mint, 1, 60);
       this.parts.burst('spark', c.x, c.y - 50, 10, 2);
@@ -492,13 +492,23 @@ export class Stage {
 
   draw(ctx: CanvasRenderingContext2D): void {
     const cam = this.cam, d = this.director, p = this.player;
-    this.backdrop.draw(ctx, cam.x, cam.y, this.time);
     ctx.save();
+    // a cut scene's close-up scales everything, backdrop included, about the point of interest
     const z = d.zoom;
     if (z !== 1) {
+      // The point of interest glides from where it is on screen toward the middle as the zoom grows,
+      // so a cat at floor level is not left under the letterbox bar. At z = 1 this is the identity.
       const fx = d.focus.x - cam.x, fy = d.focus.y - cam.y;
-      ctx.translate(fx, fy); ctx.scale(z, z); ctx.translate(-fx, -fy);
+      const u = Math.max(0, Math.min(1, (z - 1) / 0.4));
+      let ax = fx + (VIEW_W / 2 - fx) * u, ay = fy + (VIEW_H * 0.6 - fy) * u;
+      // ...but never so far that the close-up shows past the edge of the level
+      if (z > 1) {
+        ax = Math.min(ax, (fx + cam.x) * z); ax = Math.max(ax, VIEW_W - (this.lv.pw - cam.x - fx) * z);
+        ay = Math.min(ay, (fy + cam.y) * z); ay = Math.max(ay, VIEW_H - (this.lv.ph - cam.y - fy) * z);
+      }
+      ctx.translate(ax, ay); ctx.scale(z, z); ctx.translate(-fx, -fy);
     }
+    this.backdrop.draw(ctx, cam.x, cam.y, this.time);
     ctx.translate(Math.round(-cam.x + cam.shakeX), Math.round(-cam.y + cam.shakeY));
     const view = cam.sceneRect();
     const margin = 80;
