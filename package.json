@@ -1,0 +1,24 @@
+{
+  "name": "catz",
+  "version": "0.1.0",
+  "description": "Catz: pick a cat, run through town to the water park, brave the tube maze and the log flume, and hang out in the cat playhouse.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "node tools/server.ts",
+    "build": "node tools/build.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "lib-check": "node tools/lib-check.ts",
+    "gametest": "node tools/gametest.ts",
+    "smoke": "node tools/smoke.ts",
+    "playtest": "node tools/playtest.ts",
+    "shot": "node tools/shot.ts",
+    "check": "npm run typecheck && npm run lib-check && npm run gametest && npm run build && npm run smoke && npm run playtest"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3"
+  }
+}

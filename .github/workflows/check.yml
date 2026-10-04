@@ -1,0 +1,23 @@
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # lib-check compares src/lib with the subtree squash commit, which lives in history
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Playwright is only for the headless checks, so it is not a dependency of the game
+      - run: npm i --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - run: npm run check
