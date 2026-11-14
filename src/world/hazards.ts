@@ -47,7 +47,7 @@ export class Jet {
   private fired = false;
   readonly shots: Shot[] = [];
 
-  constructor(lv: Level, tx: number, ty: number, dir: 1 | -1, index: number) {
+  constructor(lv: Level, tx: number, ty: number, dir: 1 | -1, index: number, pace = 1) {
     this.dir = dir;
     this.mouthX = dir > 0 ? (tx + 1) * TILE : tx * TILE;
     let below = 0;
@@ -58,7 +58,7 @@ export class Jet {
     let n = 0;
     while (n < 40 && !isSolidCode(colAt(lv, tx + dir * (n + 1), tileOf(this.cy)))) n++;
     this.maxLen = Math.min(n, 16) * TILE;
-    this.cyc = new Cycle(70, 40, 6, index * 53);
+    this.cyc = new Cycle(Math.round(96 * pace), 48, 6, index * 53);
   }
 
   get phase(): Phase { return this.cyc.phase; }
@@ -109,7 +109,7 @@ export class Shot {
   done = false;
   private travelled = 0;
   private splash = 0;
-  static readonly SPEED = 3.3;
+  static readonly SPEED = 2.8;
   constructor(x: number, readonly y: number, readonly dir: 1 | -1, readonly range: number) { this.x = x; }
 
   update(k: number, parts: Particles): void {
@@ -155,13 +155,13 @@ export class Pour {
   private cyc: Cycle;
   private wasOn = false;
 
-  constructor(lv: Level, tx: number, ty: number, index: number) {
+  constructor(lv: Level, tx: number, ty: number, index: number, pace = 1) {
     this.x = (tx + 0.5) * TILE;
     this.top = (ty + 1) * TILE;
     let n = 0;
     while (n < 20 && !isSolidCode(colAt(lv, tx, ty + n + 1)) && colAt(lv, tx, ty + n + 1) !== C_WATER) n++;
     this.maxLen = n * TILE;
-    this.cyc = new Cycle(96, 44, 92, index * 83 + 40);
+    this.cyc = new Cycle(Math.round(112 * pace), 50, 80, index * 83 + 40);
   }
 
   get phase(): Phase { return this.cyc.phase; }
@@ -212,10 +212,10 @@ export class Geyser {
   private wasOn = false;
   static readonly MAX = 104;
 
-  constructor(lv: Level, tx: number, index: number) {
+  constructor(lv: Level, tx: number, index: number, pace = 1) {
     this.x = (tx + 0.5) * TILE;
     this.surface = lv.waterTop[tx];
-    this.cyc = new Cycle(110, 56, 64, index * 97);
+    this.cyc = new Cycle(Math.round(150 * pace), 70, 56, index * 97);
   }
 
   get phase(): Phase { return this.cyc.phase; }
@@ -268,7 +268,7 @@ export class Geyser {
 export class Log implements Platform {
   x: number;
   y: number;
-  readonly w = TILE * 3;
+  readonly w: number;
   dx = 0;
   dy = 0;
   alive = true;
@@ -279,9 +279,10 @@ export class Log implements Platform {
   /** Set by the stage when a cat is aboard: it reacts to drops. */
   rider = false;
 
-  constructor(x: number, surface: number, private readonly speed: number) {
+  constructor(x: number, surface: number, private readonly speed: number, tiles = 4) {
     this.x = x;
     this.y = surface - 6;
+    this.w = TILE * tiles;
   }
 
   update(lv: Level, k: number, parts: Particles): 'drop' | 'sank' | null {
@@ -348,12 +349,12 @@ export class Log implements Platform {
 /** Sends logs down the stream at a steady beat. */
 export class LogSpawner {
   private t: number;
-  constructor(readonly x: number, readonly surface: number, readonly every: number, offset: number, readonly speed: number) { this.t = every - 20 - offset; }
+  constructor(readonly x: number, readonly surface: number, readonly every: number, offset: number, readonly speed: number, readonly tiles = 4) { this.t = every - 20 - offset; }
   update(k: number): Log | null {
     this.t += k;
     if (this.t < this.every) return null;
     this.t -= this.every;
-    return new Log(this.x - TILE / 2, this.surface, this.speed);
+    return new Log(this.x - TILE / 2, this.surface, this.speed, this.tiles);
   }
 }
 

@@ -1,5 +1,6 @@
 // Parallax backdrops: the sky, hills and houses of the town, the dim pipes behind the tube maze, the
-// water park's slides on the horizon of the flume, and the playhouse's wallpaper and windows.
+// water park's slides on the horizon of the flume, and the playhouse's wallpaper and windows. The
+// outdoor ones come in three lights: the morning, the day, and the sunset of the last stage.
 //
 // Each band scrolls at a fraction of the camera (1 is the world, 0.1 the far sky) -- the engine
 // camera's `toScreenAt(sx, sy, factor)` arithmetic, done here per band so a band's contents can be
@@ -7,7 +8,7 @@
 import { VIEW_W, VIEW_H } from '../config.ts';
 import { makeRng } from '../lib/engine/rng.ts';
 import { shade } from '../lib/art/palettes.ts';
-import type { Theme } from './level.ts';
+import type { Sky, Theme } from './level.ts';
 
 const INK = '#1d1526';
 
@@ -19,7 +20,7 @@ export class Backdrop {
   private clouds: Cloud[] = [];
   private span: number;
 
-  constructor(readonly theme: Theme, levelW: number, seed = 7) {
+  constructor(readonly theme: Theme, levelW: number, seed = 7, readonly sky: Sky = 'day') {
     const rng = makeRng(seed);
     this.span = levelW;
     for (let x = -60; x < levelW * 0.5 + VIEW_W; ) {
@@ -45,7 +46,21 @@ export class Backdrop {
     }
   }
 
-  private sky(ctx: CanvasRenderingContext2D, top: string, bottom: string): void {
+  /** Evening: a low, fat sun sinking behind the hills, and the sky going from violet to gold. */
+  private sunsetSky(ctx: CanvasRenderingContext2D, camY: number, sunY: number): void {
+    const g = ctx.createLinearGradient(0, 0, 0, VIEW_H);
+    g.addColorStop(0, '#5b4b9e'); g.addColorStop(0.45, '#e9789a'); g.addColorStop(0.8, '#ffbf7a'); g.addColorStop(1, '#ffe2a8');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    const y = sunY - camY * 0.02;
+    ctx.fillStyle = 'rgba(255,214,140,0.35)'; ctx.beginPath(); ctx.arc(470, y, 64, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,190,120,0.5)'; ctx.beginPath(); ctx.arc(470, y, 46, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffe58a'; ctx.beginPath(); ctx.arc(470, y, 34, 0, Math.PI * 2); ctx.fill();
+    // a first star or two
+    ctx.fillStyle = '#fff6d8';
+    for (const [sx, sy] of [[90, 30], [210, 54], [330, 22], [600, 40]] as const) ctx.fillRect(sx, Math.round(sy - camY * 0.02), 2, 2);
+  }
+
+  private paintSky(ctx: CanvasRenderingContext2D, top: string, bottom: string): void {
     const g = ctx.createLinearGradient(0, 0, 0, VIEW_H);
     g.addColorStop(0, top); g.addColorStop(1, bottom);
     ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -56,7 +71,7 @@ export class Backdrop {
       const period = this.span * factor + VIEW_W + 200;
       let x = ((c.x - camX * factor + time * 0.08 * c.s) % period + period) % period - 100;
       const y = c.y - camY * 0.05;
-      drawCloud(ctx, x, y, c.s);
+      drawCloud(ctx, x, y, c.s, this.sky === 'sunset' ? 'rgba(255,205,215,0.92)' : this.sky === 'morning' ? 'rgba(255,246,236,0.92)' : undefined);
     }
   }
 
@@ -75,13 +90,24 @@ export class Backdrop {
   }
 
   private town(ctx: CanvasRenderingContext2D, camX: number, camY: number, time: number): void {
-    this.sky(ctx, '#7cc8ff', '#e6f6ff');
-    // sun
-    ctx.fillStyle = 'rgba(255,240,170,0.45)'; ctx.beginPath(); ctx.arc(540, 60 - camY * 0.02, 38, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(540, 60 - camY * 0.02, 26, 0, Math.PI * 2); ctx.fill();
+    const dusk = this.sky === 'sunset', dawn = this.sky === 'morning';
+    if (dusk) this.sunsetSky(ctx, camY, 150);
+    else if (dawn) {
+      // a pale morning: soft blue going peach at the horizon, the sun still low over the roofs
+      const g = ctx.createLinearGradient(0, 0, 0, VIEW_H);
+      g.addColorStop(0, '#9cd4ff'); g.addColorStop(0.3, '#d4ebff'); g.addColorStop(0.55, '#ffdcc2'); g.addColorStop(1, '#ffc9a8');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      ctx.fillStyle = 'rgba(255,214,160,0.4)'; ctx.beginPath(); ctx.arc(110, 118 - camY * 0.02, 52, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,226,170,0.6)'; ctx.beginPath(); ctx.arc(110, 118 - camY * 0.02, 38, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffeab0'; ctx.beginPath(); ctx.arc(110, 118 - camY * 0.02, 28, 0, Math.PI * 2); ctx.fill();
+    } else {
+      this.paintSky(ctx, '#7cc8ff', '#e6f6ff');
+      ctx.fillStyle = 'rgba(255,240,170,0.45)'; ctx.beginPath(); ctx.arc(540, 60 - camY * 0.02, 38, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(540, 60 - camY * 0.02, 26, 0, Math.PI * 2); ctx.fill();
+    }
     this.cloudBand(ctx, camX, camY, time, 0.1);
-    this.hills(ctx, camX, camY, 0.15, 250, 26, 140, '#a9dba0');
-    this.hills(ctx, camX, camY, 0.28, 280, 20, 90, '#8fcf85');
+    this.hills(ctx, camX, camY, 0.15, 250, 26, 140, dusk ? '#c79a9a' : '#a9dba0');
+    this.hills(ctx, camX, camY, 0.28, 280, 20, 90, dusk ? '#a98a8f' : '#8fcf85');
     // a row of houses
     const f = 0.5, ox = camX * f, groundY = 300 - camY * 0.35;
     for (const h of this.houses) {
@@ -94,7 +120,7 @@ export class Backdrop {
   }
 
   private tubes(ctx: CanvasRenderingContext2D, camX: number, camY: number, time: number): void {
-    this.sky(ctx, '#2a2147', '#3d2f5e');
+    this.paintSky(ctx, '#2a2147', '#3d2f5e');
     // big soft rings far away
     const f1 = 0.2;
     for (let i = -1; i < 7; i++) {
@@ -124,10 +150,11 @@ export class Backdrop {
   }
 
   private flume(ctx: CanvasRenderingContext2D, camX: number, camY: number, time: number): void {
-    this.sky(ctx, '#62c4ff', '#d9f3ff');
+    const dusk = this.sky === 'sunset';
+    if (dusk) this.sunsetSky(ctx, camY, 175); else this.paintSky(ctx, '#62c4ff', '#d9f3ff');
     this.cloudBand(ctx, camX, camY, time, 0.08);
     // mountains
-    this.hills(ctx, camX, camY, 0.1, 210, 46, 170, '#9ec7e8');
+    this.hills(ctx, camX, camY, 0.1, 210, 46, 170, dusk ? '#8f78b0' : '#9ec7e8');
     // the water park on the horizon: towers and twisting slides
     const f = 0.22, ox = camX * f;
     for (let i = 0; i < 8; i++) {
@@ -145,7 +172,7 @@ export class Backdrop {
     // the far shore: hills and pines standing on it, a lake in front of them. The stream is drawn
     // translucent, and what shows through it must be water, not tree trunks.
     const shore = Math.round(246 - camY * 0.5);
-    this.hills(ctx, camX, camY, 0.35, shore + 8, 18, 80, '#5fb86a');
+    this.hills(ctx, camX, camY, 0.35, shore + 8, 18, 80, dusk ? '#5d8a63' : '#5fb86a');
     const f2 = 0.55, ox2 = camX * f2;
     for (let i = 0; i < 30; i++) {
       const x = ((i * 71 - ox2) % 2130 + 2130) % 2130 - 60, base = shore + 4 + (i % 3) * 3;
@@ -158,7 +185,7 @@ export class Backdrop {
     }
     ctx.fillStyle = '#4f9a54'; ctx.fillRect(0, shore + 6, VIEW_W, 6);
     const lake = ctx.createLinearGradient(0, shore + 12, 0, VIEW_H);
-    lake.addColorStop(0, '#8fd0f0'); lake.addColorStop(1, '#4a9ad8');
+    lake.addColorStop(0, dusk ? '#f0a8a0' : '#8fd0f0'); lake.addColorStop(1, dusk ? '#6a6ab8' : '#4a9ad8');
     ctx.fillStyle = lake; ctx.fillRect(0, shore + 12, VIEW_W, VIEW_H - shore);
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     for (let i = 0; i < 12; i++) ctx.fillRect(Math.round(((i * 97 - camX * 0.6 + time * 0.2) % 700 + 700) % 700 - 30), shore + 16 + (i % 4) * 9, 14, 1);
@@ -207,8 +234,8 @@ export class Backdrop {
   }
 }
 
-export function drawCloud(ctx: CanvasRenderingContext2D, x: number, y: number, s: number): void {
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+export function drawCloud(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, fill = 'rgba(255,255,255,0.92)'): void {
+  ctx.fillStyle = fill;
   for (const [dx, dy, r] of [[0, 0, 16], [18, -6, 20], [38, 0, 15], [20, 6, 16]] as const) {
     ctx.beginPath(); ctx.arc(Math.round(x + dx * s), Math.round(y + dy * s), r * s, 0, Math.PI * 2); ctx.fill();
   }

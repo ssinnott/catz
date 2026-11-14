@@ -1,12 +1,13 @@
-// Challenge 2: the soft tube maze, with sewer water shooting through it.
+// Stage 5, the middle of the tube maze: the big soft maze, with sewer water shooting through it.
 //
 // Four padded corridors stacked on top of each other and joined into one long zig-zag by drop holes:
 // right along the top, left along the second, right again, left to the way out. Pipes in the walls
 // and in the pipe boxes fire gulps of sewer water along the tubes -- a pipe just above the floor
 // fires LOW shots you jump over, a pipe a tile higher fires them at HEAD height and you duck under.
 // Pipes in the ceiling pour; wait for them to stop. Fall in the sewer water and it is back to the
-// last bell. Golden fish: over the first pit, up the bounce cushion in the second corridor, and past
-// the drop hole at the end of the third. See src/world/level.ts for what each character means.
+// last bit of dry floor. A pipe box by the start keeps the first jet's shots off a cat that is still
+// reading the intro. Golden fish: over the first pit, up the bounce cushion in the second corridor,
+// and past the drop hole at the end of the third. See src/world/level.ts for each character.
 import type { LevelDef } from '../world/level.ts';
 
 export const TUBES: LevelDef = {
@@ -17,14 +18,15 @@ export const TUBES: LevelDef = {
   par: 170,
   silver: 800,
   intro: 'JUMP THE LOW ONES.\nDUCK THE HIGH ONES!',
+  outro: 'OUT OF THE MAZE!',
   rows: [
   '######################################################################',
   '##################################################v###################',
   '#....................................................................#',
   '#.......................F............................................#',
-  '#.............fff....................................................#',
-  '#............#..........................<............................<',
-  '#.P..ffff....<..............fff...g.....#.ffff.......fff..C......ff..#',
+  '#.....f.......fff....................................................#',
+  '#....f.f.....#..........................<............................<',
+  '#.P...#..ff..<..............fff...g.....#.ffff.......fff..C......ff..#',
   '#######################~~~###################################..#######',
   '#######################~~~######.F.##########################..#######',
   '################################...##v#######################..#######',

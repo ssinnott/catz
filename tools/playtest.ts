@@ -1,9 +1,9 @@
 // A scripted run through the whole game in headless Chromium, the way a player would go:
 //
 //   title -> pick a cat -> the playhouse (eat, drink, scratch, bat the toy: a happy cat)
-//   -> apple fishing (a full round) -> out the door -> the map -> the Town Run (fall in the pond,
-//   come back dripping at the bell, then reach the gate) -> the results -> the water park unlocked
-//   -> the Tube Maze and the Log Flume -> and every cat's special move, in every challenge.
+//   -> apple fishing (a full round) -> out the door -> the map -> the first stage, Home Street (fall
+//   in the pond, come back dripping on the dry ground just before it, then reach the finish) -> the
+//   results -> the map, on the next stage -> and every cat's special move, in all nine stages.
 //
 // It asserts the game gets where it should and never throws. It also leaves screenshots of the cut
 // scenes in .shots/playtest/ (not asserted on; they are for a person to look at).
@@ -87,18 +87,18 @@ await tap('right');
 await step(160);
 await shot('10-map');
 await tap('confirm');
-ok(await until(async () => (await peek()).level === 'town', 120), 'the map leads into the Town Run');
+ok(await until(async () => (await peek()).level === 'street', 120), 'the map leads into the first stage, Home Street');
 await step(40);
-await shot('11-town-intro');
+await shot('11-street-intro');
 await step(140);
 // run and jump for a while
 await hold('right', true);
 for (let i = 0; i < 30; i++) { await step(12); if (i % 3 === 0) await tap('jump'); if (i % 7 === 0) await tap('action'); }
-await shot('12-town-run');
+await shot('12-street-run');
 await hold('right', false);
 ok((await peek()).score > 0, `fish and bad guys score points (score ${(await peek()).score})`);
-// into the fountain pond
-await cheat('warp:51,14'); await step(4);
+// into the first pond (tiles 84-85), from well past the last bell rung (tile 36)
+await cheat('warp:81,14'); await step(4);
 const before = (await peek()).splashes;
 await hold('right', true); await step(30); await hold('right', false);
 await step(30);
@@ -106,13 +106,15 @@ await shot('13-splash');
 ok(await until(async () => (await peek()).splashes === before + 1, 200), 'falling in the pond is a splash');
 await step(60);
 await shot('14-respawn');
-ok(await until(async () => (await peek()).state === 'play', 400), 'and the cat is back at the bell, playing again');
+ok(await until(async () => (await peek()).state === 'play', 400), 'and the cat is back on dry land, playing again');
+const back = (await peek()).x / 24;
+ok(back > 79 && back < 84, `...right where it jumped from, not back at the bell (tile ${back.toFixed(1)})`);
 // every cat's special
 await tap('special'); await step(60);
 // to the gate
 await cheat('goal'); await step(2);
 await hold('right', true);
-ok(await until(async () => (await peek()).finished === true, 300), 'reaching the gate finishes the level');
+ok(await until(async () => (await peek()).finished === true, 300), 'reaching the finish banner finishes the stage');
 await hold('right', false);
 await step(80);
 await shot('15-goal');
@@ -121,13 +123,24 @@ await step(400);
 await shot('16-results');
 await tap('confirm');
 ok(await until(async () => await screen() === 'map', 120), 'ONWARD leads back to the map');
+ok((await peek()).at === 'market', `...standing on the next stage, now open (at ${(await peek()).at})`);
 await step(60);
 await shot('17-map-open');
 
-// ---- every cat in every challenge, with its special
+// ---- every cat in every stage, with its special
 const cats = ['crush', 'sprout', 'sly', 'biscuit', 'truffle', 'pendragon'];
-const spots: Record<string, string[]> = { town: ['warp:30,14', 'warp:113,10', 'warp:150,14'], tubes: ['warp:10,6', 'warp:50,14', 'warp:30,22'], flume: ['warp:21,9', 'warp:89,11', 'warp:151,12'] };
-for (const level of ['town', 'tubes', 'flume']) {
+const spots: Record<string, string[]> = {
+  street: ['warp:30,14', 'warp:97,11', 'warp:146,14'],
+  market: ['warp:30,14', 'warp:61,12', 'warp:155,10'],
+  town: ['warp:30,14', 'warp:113,10', 'warp:150,14'],
+  squishy: ['warp:4,6', 'warp:50,6', 'warp:30,14'],
+  tubes: ['warp:10,6', 'warp:50,14', 'warp:30,22'],
+  tower: ['warp:4,30', 'warp:60,22', 'warp:110,14'],
+  lazy: ['warp:4,9', 'warp:37,9', 'warp:150,11'],
+  flume: ['warp:21,9', 'warp:89,11', 'warp:151,12'],
+  falls: ['warp:4,7', 'warp:139,11', 'warp:220,15'],
+};
+for (const level of Object.keys(spots)) {
   for (const c of cats) {
     await g.eval(`window.__game.goto('play', ${JSON.stringify(level + ':' + c)})`); await step(2);
     ok((await peek()).cat === c, `${level} opens as ${c}`);

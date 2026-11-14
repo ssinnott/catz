@@ -11,34 +11,47 @@ export const TILE = 24;
 /** Fixed steps per second (the engine loop's 1/60). */
 export const FPS = 60;
 
-/** Platformer feel, in px and px/frame at 60 Hz. */
+/**
+ * Platformer feel, in px and px/frame at 60 Hz. Tuned to forgive: a jump pressed a little late off
+ * a ledge or a little early before landing still counts, and a quick tap still clears a small gap.
+ */
 export const PHYS = Object.freeze({
   gravity: 0.42,
   maxFall: 9,
   /** Frames after leaving a ledge during which a jump still counts as a ground jump. */
-  coyote: 6,
+  coyote: 9,
   /** Frames a jump press is remembered before landing. */
-  buffer: 7,
+  buffer: 10,
   /** Upward speed is multiplied by this when jump is let go early: a tap is a hop. */
-  jumpCut: 0.5,
+  jumpCut: 0.6,
   /** How hard a bounce pad throws a cat upward. */
   bounce: 12.5,
   /** Upward speed after stomping a bad guy. */
   stompBounce: 7,
 });
 
-/** Points. Water costs the most, because water is the one thing that sends a cat back. */
+/**
+ * Points. Water costs the most, because water is the one thing that sends a cat back. A bump costs
+ * exactly the three fish it knocks loose, so grabbing them back makes it good again.
+ */
 export const POINTS = Object.freeze({
   fish: 10,
   goldFish: 100,
   bonk: 25,
-  splash: -50,
+  splash: -30,
   hurt: -30,
-  soaked: -20,
+  soaked: -10,
   apple: 15,
   goldApple: 50,
   /** Per second left on the level's par time. */
   timeBonus: 5,
+});
+
+/** How long a cat blinks, untouchable, after each kind of mishap (frames). */
+export const MERCY = Object.freeze({
+  hurt: 120,
+  soaked: 70,
+  respawn: 90,
 });
 
 /** The palette the whole game's UI is drawn in. Rig and tile colours live with their art. */

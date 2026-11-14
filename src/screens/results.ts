@@ -1,10 +1,11 @@
-// After a challenge: the cat's victory dance, the tally line by line, the stars popping in, a new
-// best score if there is one, and the news when the water park opens.
+// After a stage: the cat's victory dance, the tally line by line, the stars popping in, a new best
+// score if there is one, and the news when it opens the next stage (or the water park, or when it was
+// the very last one).
 import { VIEW_W, VIEW_H, UI } from '../config.ts';
 import { input } from '../core/input.ts';
 import { sfx } from '../core/audio.ts';
 import { screens, type Screen } from '../core/screens.ts';
-import { save, type CatId, type LevelId } from '../core/save.ts';
+import { save, nextLevel, LEVEL_IDS, type CatId, type LevelId } from '../core/save.ts';
 import { drawText, drawTextOutlined } from '../lib/engine/text.ts';
 import { drawRig } from '../lib/art/rig.ts';
 import { AnimPlayer } from '../lib/art/animation.ts';
@@ -12,6 +13,7 @@ import { buildCat, type CatRig } from '../cats/catRig.ts';
 import { animsFor } from '../cats/catAnims.ts';
 import { Particles, starPath } from '../core/particles.ts';
 import type { LevelDef } from '../world/level.ts';
+import { LEVELS } from '../levels/index.ts';
 import type { StageResult } from '../world/stage.ts';
 import { panel } from '../ui/hud.ts';
 import { Menu } from '../ui/menu.ts';
@@ -32,15 +34,21 @@ export class ResultsScreen implements Screen {
   private counted = 0;
   private menu: Menu;
   private best: boolean;
-  private opened: boolean;
+  /** What finishing this stage just opened, to say so: '' for nothing new. */
+  private news: string;
 
   constructor(readonly level: LevelDef, readonly cat: CatId, readonly r: StageResult) {
     this.rig = buildCat(cat, 2.4);
     this.anim = new AnimPlayer(animsFor(cat));
     this.anim.play('victory');
-    const wasOpen = save.unlocked('tubes');
-    this.best = save.finishLevel(level.id as LevelId, r.score, r.stars);
-    this.opened = !wasOpen && save.unlocked('tubes');
+    const id = level.id as LevelId;
+    const before = save.furthest();
+    this.best = save.finishLevel(id, r.score, r.stars);
+    const after = save.furthest();
+    const opened = after > before ? LEVEL_IDS[after + 1] : undefined;
+    this.news = after > before && after === LEVEL_IDS.length - 1 ? 'YOU FINISHED EVERY STAGE!'
+      : opened === 'squishy' ? 'THE WATER PARK IS OPEN!'
+      : opened ? `${LEVELS[opened].name} IS OPEN!` : '';
     const mm = Math.floor(r.seconds / 60), ss = String(r.seconds % 60).padStart(2, '0');
     this.lines = [
       ['FISH TREATS', `${r.fish} / ${r.fishTotal}`],
@@ -51,10 +59,10 @@ export class ResultsScreen implements Screen {
       ['TIME BONUS', `+${r.timeBonus}`],
     ];
     if (r.happy) this.lines.push(['HAPPY CAT', 'x2']);
-    const next: LevelId | null = level.id === 'town' ? 'tubes' : level.id === 'tubes' ? 'flume' : null;
+    const next = nextLevel(id);
     this.menu = new Menu([
-      { label: next ? 'ONWARD!' : 'TO THE MAP', pick: () => screens.go(nav.map(cat, next ?? (level.id as LevelId))) },
-      { label: 'PLAY AGAIN', pick: () => screens.go(nav.play(level.id as LevelId, cat)) },
+      { label: next ? 'ONWARD!' : 'TO THE MAP', pick: () => screens.go(nav.map(cat, next ?? id)) },
+      { label: 'PLAY AGAIN', pick: () => screens.go(nav.play(id, cat)) },
       { label: 'GO HOME', pick: () => screens.go(nav.house(cat, 'map')) },
     ], 470, 268, 190, 24);
   }
@@ -116,7 +124,7 @@ export class ResultsScreen implements Screen {
     if (!this.revealing) {
       const notes: string[] = [];
       if (this.best) notes.push('NEW BEST SCORE!');
-      if (this.opened) notes.push('THE WATER PARK IS OPEN!');
+      if (this.news) notes.push(this.news);
       notes.forEach((n, i) => drawTextOutlined(ctx, n, 470, 236 + i * 14, { size: 1, color: i === 0 && this.best ? UI.pink : UI.mint, align: 'center' }));
       if (!notes.length) drawText(ctx, this.starHint(), 470, 238, { size: 1, color: INK, align: 'center', shadow: false });
       this.menu.draw(ctx);

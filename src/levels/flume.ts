@@ -1,8 +1,9 @@
-// Challenge 3: the log flume.
+// Stage 8, the middle of the flume: the log flume itself.
 //
 // A stream runs the length of the level and steps down two waterfalls. Logs float down it from the
 // left: wait on the bank or a dock for one to come, then jump DOWN onto it and ride. Splash geysers
-// erupt out of the stream -- you can see them bubble first -- so hop off onto a dock before one,
+// erupt out of the stream -- you can see them bubble first -- and throw a cat riding over one up in
+// the air (soaked, points lost, but it comes down on its log again): hop off onto a dock before one,
 // wait for it to finish, and catch the next log. Ride a log over a waterfall for a big splash.
 // Golden fish: up the steps from the second dock, at the foot of the first waterfall, and up the
 // steps past the first geyser of the lower stream. See src/world/level.ts for each character.
@@ -16,8 +17,9 @@ export const FLUME: LevelDef = {
   par: 200,
   silver: 700,
   intro: 'WAIT FOR A LOG...\nTHEN JUMP ON!',
-  stream: 1.2,
-  logEvery: 190,
+  outro: 'WHAT A RIDE!',
+  stream: 1.1,
+  logEvery: 150,
   rows: [
   '.................................................................................................................................................................................................................#',
   '.................................................................................................................................................................................................................#',

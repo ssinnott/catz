@@ -6,8 +6,14 @@
 export type CatId = 'crush' | 'sprout' | 'sly' | 'biscuit' | 'truffle' | 'pendragon';
 export const CAT_IDS: readonly CatId[] = ['crush', 'sprout', 'sly', 'biscuit', 'truffle', 'pendragon'];
 
-export type LevelId = 'town' | 'tubes' | 'flume';
-export const LEVEL_IDS: readonly LevelId[] = ['town', 'tubes', 'flume'];
+/**
+ * The stages, in the order they are played: three in town, three in the tube maze, three on the
+ * flume, each area starting gentle and ending with its hardest. Finishing one opens the next.
+ * ('town', 'tubes' and 'flume' were the first three challenges; their ids are kept so old saves
+ * keep their scores.)
+ */
+export type LevelId = 'street' | 'market' | 'town' | 'squishy' | 'tubes' | 'tower' | 'lazy' | 'flume' | 'falls';
+export const LEVEL_IDS: readonly LevelId[] = ['street', 'market', 'town', 'squishy', 'tubes', 'tower', 'lazy', 'flume', 'falls'];
 
 /** Each need runs 0..NEED_MAX. A cat with every need full is happy, and happy cats score double. */
 export interface Needs {
@@ -96,8 +102,23 @@ export const save = {
     write();
     return isBest;
   },
+  /**
+   * Stages open one at a time: the first is always open, and finishing a stage opens the one after
+   * it. Everything up to the furthest stage ever finished stays open (so a save from before there
+   * were nine stages keeps what it had).
+   */
   unlocked(level: LevelId): boolean {
-    // The water park is past the town: run the town once and both rides open.
-    return level === 'town' || !!data.done.town;
+    return LEVEL_IDS.indexOf(level) <= save.furthest() + 1;
+  },
+  /** Index in LEVEL_IDS of the furthest stage finished, or -1. */
+  furthest(): number {
+    let f = -1;
+    LEVEL_IDS.forEach((id, i) => { if (data.done[id]) f = i; });
+    return f;
   },
 };
+
+/** The stage after this one, or null after the last. */
+export function nextLevel(level: LevelId): LevelId | null {
+  return LEVEL_IDS[LEVEL_IDS.indexOf(level) + 1] ?? null;
+}
