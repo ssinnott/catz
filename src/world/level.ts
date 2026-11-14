@@ -23,6 +23,16 @@ export const C_EMPTY = 0, C_SOLID = 1, C_ONEWAY = 2, C_WATER = 3, C_BOUNCE = 4, 
 
 export type Theme = 'town' | 'tubes' | 'flume' | 'house';
 
+export type Sky = 'morning' | 'day' | 'sunset';
+
+/** What the goal looks like: the water park's gate, the tube maze's way out, or a finish banner. */
+export type GoalArt = 'gate' | 'exit' | 'finish';
+
+/** The goal a theme has unless a level says otherwise. */
+export function goalArtOf(def: LevelDef): GoalArt {
+  return def.goal ?? (def.theme === 'tubes' ? 'exit' : def.theme === 'town' ? 'gate' : 'finish');
+}
+
 export type SpawnKind =
   | 'start' | 'checkpoint' | 'goal' | 'fish' | 'goldfish'
   | 'rat' | 'raccoon' | 'dog' | 'pigeon' | 'crab' | 'frog'
@@ -57,6 +67,19 @@ export interface LevelDef {
   stream?: number;
   /** Frames between logs from each spawner. */
   logEvery?: number;
+  /** How long the logs are, in tiles (default 4). */
+  logW?: number;
+  /**
+   * How long every jet, pipe and geyser on this level stays quiet between gushes, as a multiple of
+   * the usual (default 1). The first stage of each area takes it slow.
+   */
+  pace?: number;
+  /** The light: one day out, from a morning on the home street to the sunset over the big falls. */
+  sky?: Sky;
+  /** What the cat says on reaching the goal. */
+  outro?: string;
+  /** What the goal looks like, if not the theme's own (see goalArtOf). */
+  goal?: GoalArt;
   /** Station names for the playhouse, by index, left to right. */
   stations?: readonly string[];
 }

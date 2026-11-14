@@ -1,13 +1,16 @@
 // The game's own Node tests: the rules that are cheap to check without a browser, and the one that
-// is not cheap but matters most -- that every cat can finish every challenge and reach every golden
+// is not cheap but matters most -- that every cat can finish every stage and reach every golden
 // fish (tools/reach.ts, which drives the real Player code).
 //
 // Usage: node tools/gametest.ts            everything
 //        node tools/gametest.ts --quick    skip the reachability search
-import { parseLevel, LEGEND, C_SOLID, colAt, type LevelDef } from '../src/world/level.ts';
+import { parseLevel, LEGEND, C_SOLID, colAt, inWater, type LevelDef } from '../src/world/level.ts';
+import { Player } from '../src/world/player.ts';
+import { Particles } from '../src/core/particles.ts';
+import { input } from '../src/core/input.ts';
 import { LEVELS } from '../src/levels/index.ts';
 import { HOUSE } from '../src/levels/house.ts';
-import { CAT_IDS, LEVEL_IDS, loadSave, save, NEED_MAX } from '../src/core/save.ts';
+import { CAT_IDS, LEVEL_IDS, loadSave, save, nextLevel, NEED_MAX } from '../src/core/save.ts';
 import { animsFor, REQUIRED_ANIMS } from '../src/cats/catAnims.ts';
 import { CATS } from '../src/cats/roster.ts';
 import { TRACKS } from '../src/core/music.ts';
@@ -26,6 +29,15 @@ function section(name: string): void { console.log(name); }
 
 // ---------------------------------------------------------------- levels
 section('levels');
+ok(LEVEL_IDS.length === 9 && LEVEL_IDS.every((id) => LEVELS[id] && LEVELS[id].id === id), 'nine stages, each registered under its own id');
+for (const [i, theme] of (['town', 'town', 'town', 'tubes', 'tubes', 'tubes', 'flume', 'flume', 'flume'] as const).entries()) {
+  ok(LEVELS[LEVEL_IDS[i]].theme === theme, `stage ${i + 1} (${LEVEL_IDS[i]}) is in the ${theme}`);
+}
+ok(LEVELS.town.goal === undefined && LEVEL_IDS.filter((id) => LEVELS[id].theme === 'town' && id !== 'town').every((id) => LEVELS[id].goal === 'finish'), 'only the Town Run ends at the water park gate');
+ok(LEVEL_IDS.every((id) => !!LEVELS[id].outro), 'every stage has something to say at the finish');
+// the first stage of each area takes it slower than the one after it
+ok((LEVELS.squishy.pace ?? 1) > (LEVELS.tubes.pace ?? 1) && (LEVELS.lazy.pace ?? 1) > (LEVELS.flume.pace ?? 1), 'the first tube and flume stages have calmer pipes and geysers');
+ok((LEVELS.lazy.logEvery ?? 200) * (LEVELS.lazy.stream ?? 1) - (LEVELS.lazy.logW ?? 4) * TILE < (LEVELS.flume.logEvery ?? 200) * (LEVELS.flume.stream ?? 1) - (LEVELS.flume.logW ?? 4) * TILE, 'the lazy river leaves smaller gaps between its logs than the flume');
 const ALL: LevelDef[] = [...LEVEL_IDS.map((id) => LEVELS[id]), HOUSE];
 for (const def of ALL) {
   const w = def.rows[0].length;
@@ -111,15 +123,66 @@ section('physics');
   ok(c.bounced, 'landing on a cushion bounces');
 }
 
+// ---------------------------------------------------------------- forgiving
+section('forgiving');
+{
+  // a strip of ground ending in water at x = 168: a cat standing 16 px from the edge
+  const edge = parseLevel({ id: 'house', name: 't', theme: 'town', music: '', par: 0, silver: 0, intro: '', rows: [
+    '..............',
+    '..............',
+    '..............',
+    '..............',
+    '#######~~~~~~~',
+    '#######~~~~~~~',
+  ] });
+  const parts = new Particles();
+  const run = (p: Player, n: number) => { for (let i = 0; i < n; i++) { input.poll(); p.update(edge, [], parts); } };
+  for (const cat of CAT_IDS) {
+    const bumped = new Player(cat, 6 * TILE, 4 * TILE);
+    run(bumped, 10);
+    bumped.hurt(bumped.feetX - 10);
+    run(bumped, 120);
+    ok(bumped.body.onGround && !inWater(edge, bumped.feetX, bumped.centerY + 4), `${cat}: a bump at the water's edge does not knock it in`);
+    const soaked = new Player(cat, 6 * TILE, 4 * TILE);
+    run(soaked, 10);
+    soaked.soak(1, 0, parts);
+    run(soaked, 120);
+    ok(soaked.body.onGround && !inWater(edge, soaked.feetX, soaked.centerY + 4), `${cat}: a water jet at the water's edge does not push it in`);
+  }
+  // every cat, holding jump, rises clear over a step three tiles high
+  const flat = parseLevel({ id: 'house', name: 't', theme: 'town', music: '', par: 0, silver: 0, intro: '', rows: [
+    '......', '......', '......', '......', '......', '......', '######',
+  ] });
+  for (const cat of CAT_IDS) {
+    const p = new Player(cat, 3 * TILE, 6 * TILE);
+    for (let i = 0; i < 6; i++) { input.poll(); p.update(flat, [], parts); }
+    let top = p.feetY;
+    for (let i = 0; i < 40; i++) { input.force('jump', true); input.poll(); p.update(flat, [], parts); top = Math.min(top, p.feetY); }
+    input.force('jump', false); input.poll();
+    const rise = 6 * TILE - top;
+    ok(rise >= 3 * TILE + 6, `${cat}: a full jump clears a three-tile step with room to spare (rises ${rise.toFixed(1)} px)`);
+  }
+}
+
 // ---------------------------------------------------------------- save
 section('save');
 {
   loadSave(false);
-  ok(!save.unlocked('tubes') && save.unlocked('town'), 'the water park starts locked');
-  save.finishLevel('town', 500, 2);
-  ok(save.unlocked('tubes') && save.unlocked('flume'), 'running the town opens the water park');
-  ok(!save.finishLevel('town', 400, 1) && save.data.best.town === 500 && save.data.stars.town === 2, 'a worse run keeps the best score and stars');
-  ok(save.finishLevel('town', 900, 3) && save.data.stars.town === 3, 'a better run is a new best');
+  const open = () => LEVEL_IDS.filter((id) => save.unlocked(id)).join(' ');
+  ok(open() === 'street', `only the first stage starts open (open: ${open()})`);
+  save.finishLevel('street', 500, 2);
+  ok(open() === 'street market', `finishing a stage opens the next one, and only that one (open: ${open()})`);
+  ok(!save.finishLevel('street', 400, 1) && save.data.best.street === 500 && save.data.stars.street === 2, 'a worse run keeps the best score and stars');
+  ok(save.finishLevel('street', 900, 3) && save.data.stars.street === 3, 'a better run is a new best');
+  save.finishLevel('market', 500, 1);
+  ok(!save.unlocked('squishy'), 'the water park stays shut until the town is crossed');
+  save.finishLevel('town', 500, 1);
+  ok(save.unlocked('squishy') && !save.unlocked('tubes'), 'the Town Run opens the water park, at its first stage');
+  ok(nextLevel('street') === 'market' && nextLevel('town') === 'squishy' && nextLevel('falls') === null, 'each stage leads on to the next, and the last to none');
+  // a save from when there were three challenges: the town and the flume done, the new stages not
+  loadSave(false);
+  save.finishLevel('town', 700, 2); save.finishLevel('flume', 600, 1);
+  ok(LEVEL_IDS.every((id) => save.unlocked(id)), 'an old save keeps everything up to (and one past) the furthest stage it finished');
   save.addNeed('biscuit', 'food', 99);
   ok(save.needs('biscuit').food === NEED_MAX, 'needs never go over the top');
   save.addNeed('biscuit', 'food', -99);
@@ -130,7 +193,7 @@ section('save');
 
 // ---------------------------------------------------------------- reachability
 if (!process.argv.includes('--quick')) {
-  section('reachability (every cat, every challenge, every golden fish)');
+  section('reachability (every cat, every stage, every golden fish)');
   for (const id of LEVEL_IDS) {
     for (const cat of CAT_IDS) {
       const r = reach(LEVELS[id], cat, { logs: LEVELS[id].theme === 'flume' });

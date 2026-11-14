@@ -4,7 +4,7 @@
 // It reads actions, never keys (src/core/input.ts), and reports what happened as `events` for the
 // stage to act on -- the player does not know what a bad guy or a cracked block is, it only says
 // "my paw is live here" or "I just slammed the ground there".
-import { PHYS } from '../config.ts';
+import { PHYS, MERCY } from '../config.ts';
 import { input } from '../core/input.ts';
 import { sfx } from '../core/audio.ts';
 import { approach } from '../lib/engine/math.ts';
@@ -81,6 +81,8 @@ export class Player implements Hittable {
   private rng = makeRng(0xca7);
   /** A ghost trail while dashing: recent feet positions. */
   readonly trail: { x: number; y: number; f: number }[] = [];
+  /** The log a geyser threw the cat up from: the cat drifts along with it and lands back on it. */
+  private airRide: Platform | null = null;
   /** Scripted walking: where a cutscene wants the cat to go. */
   private scriptTarget: number | null = null;
   private scriptSpeed = 2;
@@ -107,6 +109,7 @@ export class Player implements Hittable {
     b.h = this.standH; b.w = this.def.hitbox.w;
     b.x = x - b.w / 2; b.y = y - b.h;
     b.vx = 0; b.vy = 0; b.onGround = false; b.ride = null; b.dropThrough = 0;
+    this.airRide = null;
     this.facing = facing;
     this.ducking = false;
     this.state = 'play';
@@ -158,8 +161,12 @@ export class Player implements Hittable {
 
     if (this.state === 'hidden' || this.state === 'splash') { this.tickAnim(parts); return; }
 
-    // ride the log we stood on last step
+    // ride the log we stood on last step (or, thrown up off it by a geyser, drift along above it)
     if (b.ride && b.onGround) carry(lv, b, b.ride);
+    if (this.airRide) {
+      if (b.onGround || this.state !== 'hurt' || !this.airRide.alive) this.airRide = null;
+      else moveX(lv, b, this.airRide.dx);
+    }
 
     const playing = this.state === 'play' || this.state === 'attack';
     const ax = playing ? input.axisX() : 0;
@@ -369,11 +376,24 @@ export class Player implements Hittable {
     this.dash = 0; this.pounding = false; this.hitActive = 0;
     if (this.ducking && this.setHeight(this.standH)) this.ducking = false;
     const away = this.feetX < fromX ? -1 : 1;
-    b.vx = away * 3.2; b.vy = -4.2; b.onGround = false;
-    this.invuln = 100;
+    b.vx = away * this.knock(away, 2.2, 40); b.vy = -3.6; b.onGround = false;
+    this.invuln = MERCY.hurt;
     this.play('hurt', true);
     sfx('hurt', 1, this.def.pitch);
     return true;
+  }
+
+  /**
+   * How hard a knock may push the cat along `dir` without shoving it off a ledge (or off its log):
+   * the full `speed` when there is floor for `reach` px that way, else barely a nudge. In the air
+   * there is no ledge to check, so it is a gentle shove either way.
+   */
+  private knock(dir: number, speed: number, reach: number): number {
+    const lv = this.levelRef, b = this.body;
+    if (!lv) return speed;
+    if (!b.onGround) return Math.min(speed, 1.4);
+    for (let d = 8; d <= reach; d += 8) if (!floorAt(lv, this.feetX + dir * (b.w / 2 + d), this.feetY + 2)) return 0.4;
+    return speed;
   }
 
   /** Hit by a water jet or pour: pushed along `dir`, soaked. Returns false if it did not land. */
@@ -381,29 +401,35 @@ export class Player implements Hittable {
     if (this.invulnerable || this.shield > 0 || this.state === 'hurt') return false;
     const b = this.body, k = this.def.pushback;
     this.wet = 1;
-    this.invuln = 50;
+    this.invuln = MERCY.soaked;
     parts.splash(this.feetX, this.body.y + this.body.h * 0.4, 0.6);
     if (k < 0.5) {
       // Crush just stands there, dripping
-      b.vx = dirX * 1.2;
+      b.vx = dirX * this.knock(dirX, 1.2, 24);
       this.play('shake', true);
       return true;
     }
     this.state = 'hurt'; this.stateT = 0;
     this.dash = 0; this.hitActive = 0;
     if (this.ducking && this.setHeight(this.standH)) this.ducking = false;
-    b.vx = dirX * 5.5 * k; b.vy = dirY ? dirY * 3 : -3.2; b.onGround = false;
+    b.vx = dirX * this.knock(dirX, 3 * k, 56); b.vy = dirY ? dirY * 2 : -2.8; b.onGround = false;
     this.play('hurt', true);
     sfx('hurt', 0.9, this.def.pitch);
     return true;
   }
 
-  /** Thrown into the air by a geyser. */
-  launch(vy: number, vx: number): void {
+  /**
+   * Thrown into the air by a geyser. Thrown off a log, the cat keeps pace with it and comes down
+   * on it again: a soaking and a fright, not a swim.
+   */
+  launch(vy: number, vx: number, from: Platform | null = null): void {
     const b = this.body;
     this.state = 'hurt'; this.stateT = 0; this.dash = 0;
-    b.vy = vy; b.vx = vx; b.onGround = false;
+    if (this.ducking && this.setHeight(this.standH)) this.ducking = false;
+    b.vy = vy; b.vx = from ? 0 : vx; b.onGround = false;
+    this.airRide = from;
     this.wet = 1;
+    this.invuln = Math.max(this.invuln, 40);
     this.play('flail', false);
   }
 

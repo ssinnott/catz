@@ -3,7 +3,7 @@
 // The stage owns every rule that involves two things touching -- a paw and a raccoon, a cat and a
 // jet, a cat and the water -- because neither side of a collision should know the other's rules.
 // The challenge screen (src/screens/play.ts) and the playhouse (src/screens/house.ts) both run one.
-import { VIEW_W, VIEW_H, TILE, POINTS, UI } from '../config.ts';
+import { VIEW_W, VIEW_H, TILE, POINTS, UI, MERCY } from '../config.ts';
 import { sfx } from '../core/audio.ts';
 import { input } from '../core/input.ts';
 import { Particles } from '../core/particles.ts';
@@ -12,8 +12,8 @@ import { createCamera, type Camera } from '../lib/scene/camera.ts';
 import { makeRng } from '../lib/engine/rng.ts';
 import { CF } from '../cats/catRig.ts';
 import { Flock } from '../cats/dragons.ts';
-import { breakTile, inWater, parseLevel, surfaceAt, tileOf, type Level, type LevelDef, type Spawn } from './level.ts';
-import { overlaps } from './physics.ts';
+import { C_ONEWAY, C_SOLID, breakTile, colAt, goalArtOf, inWater, parseLevel, surfaceAt, tileOf, type Level, type LevelDef, type Spawn } from './level.ts';
+import { fits, overlaps } from './physics.ts';
 import { Player } from './player.ts';
 import { Enemy, type EnemyKind } from './enemies.ts';
 import { Jet, Pour, Geyser, Log, LogSpawner, drawWater, WATER_STYLES } from './hazards.ts';
@@ -74,7 +74,13 @@ export class Stage {
   readonly goal: Goal | null = null;
   readonly flock: Flock | null = null;
   private hooks: StageHooks;
+  /** The last checkpoint bell rung (the pause menu's BACK TO LAST BELL). */
   respawn: { x: number; y: number; facing: 1 | -1 };
+  /**
+   * The last spot the cat stood still-safe on dry, solid ground: where a splash brings it back, so
+   * a missed jump costs a try at that jump, not the whole stretch since the bell.
+   */
+  safe: { x: number; y: number; facing: 1 | -1 } | null = null;
   score = 0;
   fishGot = 0;
   goldGot = 0;
@@ -100,24 +106,25 @@ export class Stage {
     this.player = new Player(cat, lv.start.x, lv.start.y);
     this.respawn = { x: lv.start.x, y: lv.start.y, facing: 1 };
     this.tiles = new TileLayer(lv, def.theme);
-    this.backdrop = new Backdrop(def.theme, lv.pw, def.name.length * 31 + 7);
+    this.backdrop = new Backdrop(def.theme, lv.pw, def.name.length * 31 + 7, def.sky ?? 'day');
     this.cam = createCamera({ viewW: VIEW_W, viewH: VIEW_H, ease: 0.12, bounds: { x: 0, y: 0, w: lv.pw, h: lv.ph } });
     this.happy = def.id !== 'house' && save.isHappy(cat);
     let fishN = 0, goldN = 0;
     let goal: Goal | null = null;
+    const pace = def.pace ?? 1;
     for (const s of lv.spawns) {
       switch (s.kind) {
         case 'fish': this.fish.push(new Fish(s.x, s.y - 4, false)); fishN++; break;
         case 'goldfish': this.fish.push(new Fish(s.x, s.y - 4, true)); goldN++; break;
         case 'rat': case 'raccoon': case 'dog': case 'pigeon': case 'crab': case 'frog':
           this.enemies.push(new Enemy(s.kind as EnemyKind, s.x, s.y, s.index)); break;
-        case 'jetR': this.jets.push(new Jet(lv, s.tx, s.ty, 1, s.index)); break;
-        case 'jetL': this.jets.push(new Jet(lv, s.tx, s.ty, -1, s.index)); break;
-        case 'pour': this.pours.push(new Pour(lv, s.tx, s.ty, s.index)); break;
-        case 'geyser': this.geysers.push(new Geyser(lv, s.tx, s.index)); break;
-        case 'logs': this.spawners.push(new LogSpawner(s.x, lv.waterTop[s.tx], def.logEvery ?? 200, s.index * 70, def.stream ?? 1)); break;
+        case 'jetR': this.jets.push(new Jet(lv, s.tx, s.ty, 1, s.index, pace)); break;
+        case 'jetL': this.jets.push(new Jet(lv, s.tx, s.ty, -1, s.index, pace)); break;
+        case 'pour': this.pours.push(new Pour(lv, s.tx, s.ty, s.index, pace)); break;
+        case 'geyser': this.geysers.push(new Geyser(lv, s.tx, s.index, pace)); break;
+        case 'logs': this.spawners.push(new LogSpawner(s.x, lv.waterTop[s.tx], def.logEvery ?? 200, s.index * 70, def.stream ?? 1, def.logW ?? 4)); break;
         case 'checkpoint': this.checkpoints.push(new Checkpoint(s.x, s.y, s.index)); break;
-        case 'goal': goal = new Goal(s.x, s.y, def.theme); break;
+        case 'goal': goal = new Goal(s.x, s.y, goalArtOf(def)); break;
         case 'station': this.stations.push(s); break;
         case 'lamp': case 'tree': case 'bush': case 'flowers': case 'fence': case 'sign':
           this.decor.push(new Decor(s.kind, s.x, s.y, def.theme, s.tx * 7 + s.ty)); break;
@@ -167,7 +174,7 @@ export class Stage {
     sfx('splash');
     this.cam.shake(5, 22);
     this.addPoints(POINTS.splash, p.feetX, surface - 50, true);
-    d.shout('SPLASH!', 'BACK TO THE LAST BELL', 100, UI.sky);
+    d.shout('SPLASH!', 'BACK TO DRY LAND', 100, UI.sky);
     d.bars(true);
     d.focus = { x: p.feetX, y: surface - 20 };
     d.zoomIn(1.4, 0.1);
@@ -181,8 +188,8 @@ export class Stage {
     yield 16;
     d.closeIris({ x: VIEW_W / 2, y: VIEW_H / 2 });
     yield 22;
-    // back at the checkpoint, dripping
-    const r = this.respawn;
+    // back on dry land, just before the jump that went wrong, dripping
+    const r = this.safe ?? this.respawn;
     p.placeAt(r.x, r.y, r.facing);
     p.state = 'script';
     p.wet = 1;
@@ -199,7 +206,7 @@ export class Stage {
     d.zoomIn(1, 0.12);
     d.bars(false);
     p.script(false);
-    p.invuln = 60;
+    p.invuln = MERCY.respawn;
   }
 
   private *goalScene(): Scene {
@@ -210,9 +217,9 @@ export class Stage {
     sfx('fanfare');
     d.focus = { x: g.x, y: g.y - 40 };
     d.zoomIn(1.3, 0.06);
-    p.walkTo(g.x + (this.def.theme === 'tubes' ? 0 : 18), 2.2);
+    p.walkTo(g.x + (g.art === 'exit' ? 0 : 18), 2.2);
     for (let i = 0; i < 120 && !p.arrived; i++) yield 1;
-    if (this.def.theme === 'tubes') {
+    if (g.art === 'exit') {
       // into the exit tube, and away down the slide
       p.play('slide', true);
       sfx('wheee');
@@ -228,10 +235,9 @@ export class Stage {
     d.flash = 0.5;
     sfx('win');
     for (let i = 0; i < 4; i++) this.parts.burst('confetti', g.x + (i - 1.5) * 40, g.y - 110, 18, 3.5, -Math.PI / 2, Math.PI * 0.9);
-    const lines: Record<string, string> = { town: 'WE MADE IT TO THE\nWATER PARK!', tubes: 'OUT OF THE MAZE!', flume: 'WHAT A RIDE!' };
-    d.shout(this.def.theme === 'town' ? 'WATER PARK!' : 'YOU DID IT!', '', 130);
+    d.shout(g.art === 'gate' ? 'WATER PARK!' : 'YOU DID IT!', '', 130);
     yield 30;
-    d.say(lines[this.def.theme] || 'YAY!', 0, 0, 100, () => p.headTop());
+    d.say(this.def.outro ?? 'YAY!', 0, 0, 100, () => p.headTop());
     yield 110;
     this.hooks.onFinish?.(this.result());
   }
@@ -286,6 +292,7 @@ export class Stage {
     for (const log of this.logs) log.rider = p.body.ride === log;
     p.update(this.lv, this.logs, this.parts);
     this.playerEvents();
+    this.trackSafe();
 
     const target = { x: p.feetX, y: p.feetY, quiet: p.def.quiet, hidden: p.shadow > 0 || p.state === 'hidden' || p.state === 'splash' };
     for (const e of this.enemies) e.update(this.lv, target, this.logs, k, this.parts);
@@ -307,6 +314,28 @@ export class Stage {
     // retire what is finished with
     for (let i = this.fish.length - 1; i >= 0; i--) if (this.fish[i].taken || this.fish[i].life <= 0) this.fish.splice(i, 1);
     for (let i = this.enemies.length - 1; i >= 0; i--) if (this.enemies[i].gone) this.enemies.splice(i, 1);
+  }
+
+  /**
+   * Remember where the cat is standing, if it is somewhere a splash could fairly bring it back to:
+   * standing in control on solid ground the whole width of the cat (not a log, a bounce cushion or
+   * a cracked block Crush could smash), with headroom to stand, and not under a pipe that pours.
+   */
+  private trackSafe(): void {
+    const p = this.player, b = p.body, lv = this.lv;
+    if (this.finished || !(p.state === 'play' || p.state === 'attack') || !b.onGround || b.ride) return;
+    const y = tileOf(b.y + b.h + 2);
+    for (const x of [b.x + 1, b.x + b.w / 2, b.x + b.w - 1]) {
+      const c = colAt(lv, tileOf(x), y);
+      if (c !== C_SOLID && c !== C_ONEWAY) return;
+    }
+    const w = p.def.hitbox.w;
+    if (!fits(lv, p.feetX - w / 2, p.feetY - p.standH, w, p.standH)) return;
+    for (const pr of this.pours) if (Math.abs(pr.x - p.feetX) < 22) return;
+    for (const j of this.jets) if (Math.abs(j.mouthX - p.feetX) < 36 && Math.abs(j.cy - p.centerY) < 40) return;
+    const s = this.safe;
+    if (s && s.x === p.feetX && s.y === p.feetY && s.facing === p.facing) return;
+    this.safe = { x: p.feetX, y: p.feetY, facing: p.facing };
   }
 
   private playerEvents(): void {
@@ -379,9 +408,12 @@ export class Stage {
       if (!overlaps(pb, e.body)) continue;
       if (p.shield > 0) { this.bonk(e, 1); continue; }
       if (p.shadow > 0 || p.state === 'splash') continue;
-      const stomp = pb.vy > 0 && pb.y + pb.h - pb.vy <= e.body.y + 9 && e.stompable;
+      const stomp = pb.vy > 0 && pb.y + pb.h - pb.vy <= e.body.y + 12 && e.stompable;
       if (stomp) { this.bonk(e, p.def.power); p.stompBounce(); continue; }
       if (p.invuln > 0 || p.state === 'hurt') continue;
+      // a brush is not a bump: it takes a real overlap (3 px in from every edge) to get bonked
+      const eb = e.body;
+      if (!overlaps(pb, { x: eb.x + 3, y: eb.y + 3, w: eb.w - 6, h: eb.h - 6 })) continue;
       if (p.hurt(ec)) this.loseFish();
     }
     // ---- dragon fire
@@ -415,7 +447,7 @@ export class Stage {
       if (!box || !overlaps(pb, box)) continue;
       if (shielded) { this.steam(g.x, pb.y + pb.h); continue; }
       if (p.invulnerable || p.state === 'hurt') continue;
-      p.launch(-9.5, (p.feetX < g.x ? -1 : 1) * 1.5);
+      p.launch(-8, (p.feetX < g.x ? -1 : 1) * 1.2, pb.onGround ? pb.ride : null);
       this.addPoints(POINTS.soaked, p.feetX, pb.y - 10);
       this.parts.text(p.feetX, pb.y - 26, 'WHOOSH!', UI.sky, 1, 45);
       sfx('geyser', 0.6);
@@ -538,6 +570,8 @@ export class Stage {
     this.hooks.drawFront?.(ctx, this);
     d.drawWorld(ctx);
     ctx.restore();
+    // the low sun warms everything a little
+    if (this.def.sky === 'sunset') { ctx.fillStyle = 'rgba(255,128,72,0.1)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
     if (this.player.slowmo > 0) {
       ctx.fillStyle = `rgba(120,200,255,${0.1 + Math.sin(this.time * 0.1) * 0.03})`;
       ctx.fillRect(0, 0, VIEW_W, VIEW_H);

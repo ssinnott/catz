@@ -1,8 +1,9 @@
 // Headless proof that the game loads and draws in a real browser, served as TypeScript through the
 // dev server with nothing compiled to disk -- and that every screen can be opened without an error.
 import { openGame } from './browser.ts';
+import { LEVEL_IDS } from '../src/core/save.ts';
 
-const SCREENS = ['title', 'select', 'house', 'map', 'fishing', 'results', 'play:town', 'play:tubes', 'play:flume', 'lab'];
+const SCREENS = ['title', 'select', 'house', 'map', 'fishing', 'results', ...LEVEL_IDS.map((id) => `play:${id}`), 'lab'];
 let bad = 0;
 const ok = (cond: boolean, msg: string) => { console.log((cond ? '  ok:   ' : '  FAIL: ') + msg); if (!cond) bad++; };
 

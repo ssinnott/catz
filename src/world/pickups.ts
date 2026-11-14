@@ -3,7 +3,7 @@
 import { TILE } from '../config.ts';
 import { PHYS } from '../config.ts';
 import { makeBody, moveX, moveY, type Body, type Platform } from './physics.ts';
-import type { Level, Theme } from './level.ts';
+import type { GoalArt, Level, Theme } from './level.ts';
 import { drawText } from '../lib/engine/text.ts';
 
 const INK = '#1d1526';
@@ -104,14 +104,14 @@ export class Checkpoint {
   }
 }
 
-/** The goal, drawn as each level's landmark: the water park gate, the tube maze exit, the flume's finish. */
+/** The goal, drawn as each level's landmark: the water park gate, the tube maze exit, a finish banner. */
 export class Goal {
-  constructor(readonly x: number, readonly y: number, readonly theme: Theme) {}
+  constructor(readonly x: number, readonly y: number, readonly art: GoalArt) {}
   box(): { x: number; y: number; w: number; h: number } { return { x: this.x - 14, y: this.y - 72, w: 28, h: 72 }; }
 
   drawBack(ctx: CanvasRenderingContext2D, time: number): void {
     const x = Math.round(this.x), y = Math.round(this.y);
-    if (this.theme === 'town') {
+    if (this.art === 'gate') {
       // the water park gate: two striped pillars, an arch, a sign, a slide peeking over the top
       ctx.fillStyle = '#3aa0e8';
       ctx.fillRect(x - 10, y - 150, 120, 30);
@@ -132,7 +132,7 @@ export class Goal {
         ctx.fillStyle = 'rgba(190,235,255,0.8)';
         ctx.beginPath(); ctx.arc(x + 5 + Math.sin(a) * 30, y - 145 - Math.abs(Math.sin(a * 0.7)) * 20, 3, 0, Math.PI * 2); ctx.fill();
       }
-    } else if (this.theme === 'tubes') {
+    } else if (this.art === 'exit') {
       // the way out: a big round tube mouth with daylight in it, and an EXIT sign
       ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(x, y - 30, 32, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#ffcb3d'; ctx.beginPath(); ctx.arc(x, y - 30, 30, 0, Math.PI * 2); ctx.fill();
@@ -141,7 +141,7 @@ export class Goal {
       ctx.fillStyle = INK; ctx.fillRect(x - 24, y - 84, 48, 18);
       ctx.fillStyle = '#4ad66d'; ctx.fillRect(x - 22, y - 82, 44, 14);
       drawText(ctx, 'EXIT', x, y - 79, { size: 1, color: '#ffffff', align: 'center', shadowColor: '#1d6b31' });
-    } else if (this.theme === 'flume') {
+    } else {
       // the finish: a checkered banner on two posts
       for (const px of [x - 40, x + 36]) { ctx.fillStyle = INK; ctx.fillRect(px - 1, y - 100, 6, 100); ctx.fillStyle = '#c99a62'; ctx.fillRect(px, y - 99, 4, 99); }
       ctx.fillStyle = INK; ctx.fillRect(x - 40, y - 100, 82, 24);

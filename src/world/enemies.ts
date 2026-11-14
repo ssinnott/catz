@@ -3,9 +3,10 @@
 //
 //   raccoon   a bandit with a loot sack. Patrols, turns at walls and ledges. Bonk him and he drops it.
 //   rat       quick and small, hops now and then
-//   bulldog   patrols; when he spots a cat he barks and charges. Takes two bonks (one from Crush).
-//             Sly is too quiet for him to notice.
-//   pigeon    flies a lazy loop and swoops at cats below it
+//   bulldog   patrols; when he spots a cat he barks (a good long WOOF, so there is time to get
+//             ready) and charges. Takes two bonks (one from Crush). Sly is too quiet for him to notice.
+//   pigeon    flies a lazy loop; spotting a cat below, it rears up flapping with a "!" and then
+//             swoops at where the cat was
 //   crab      sidles along the rocks of the log flume
 //   frog      sits in the tube maze and hops straight up out of nowhere
 //
@@ -30,9 +31,12 @@ export interface Target {
   hidden: boolean;
 }
 
+/** Frames a pigeon spends rearing up, flapping, before it swoops. */
+const WINDUP = 24;
+
 const SIZE: Readonly<Record<EnemyKind, { w: number; h: number; hp: number; speed: number }>> = {
   raccoon: { w: 17, h: 40, hp: 1, speed: 0.75 },
-  rat: { w: 15, h: 26, hp: 1, speed: 1.45 },
+  rat: { w: 15, h: 26, hp: 1, speed: 1.15 },
   dog: { w: 22, h: 44, hp: 2, speed: 0.6 },
   pigeon: { w: 18, h: 14, hp: 1, speed: 1.0 },
   crab: { w: 22, h: 14, hp: 1, speed: 0.5 },
@@ -121,13 +125,13 @@ export class Enemy {
     const b = this.body;
     let v = speed;
     if (this.kind === 'dog') {
-      if (this.state === 'patrol' && notices && this.cool <= 0 && Math.abs(dx) < 150 && Math.abs(dy) < 50) {
+      if (this.state === 'patrol' && notices && this.cool <= 0 && Math.abs(dx) < 130 && Math.abs(dy) < 50) {
         this.state = 'bark'; this.t = 0; this.facing = dx > 0 ? 1 : -1;
         sfx('bark'); this.anim?.play('bark', { restart: true });
         parts.text(b.x + b.w / 2, b.y - 8, 'WOOF!', '#ffd23f', 1, 40);
       }
-      if (this.state === 'bark') { v = 0; if (this.t > 26) { this.state = 'chase'; this.t = 0; } }
-      else if (this.state === 'chase') { v = 2.5; if (this.t > 110) { this.state = 'patrol'; this.cool = 120; } }
+      if (this.state === 'bark') { v = 0; if (this.t > 44) { this.state = 'chase'; this.t = 0; } }
+      else if (this.state === 'chase') { v = 1.9; if (this.t > 90) { this.state = 'patrol'; this.cool = 150; } }
     }
     if (this.kind === 'rat' && b.onGround && this.t % 130 < k && this.t > 10) { b.vy = -5; }
     b.vx = this.facing * v;
@@ -161,12 +165,14 @@ export class Enemy {
     } else if (this.state === 'swoop') {
       const vx = this.swoopX - cx, vy = this.swoopY - cy, d = Math.hypot(vx, vy) || 1;
       this.facing = vx > 0 ? 1 : -1;
-      b.x += (vx / d) * 3.2 * k; b.y += (vy / d) * 3.2 * k;
-      if (d < 6 || this.t > 60) { this.state = 'return'; this.t = 0; }
+      // the tell: it rears up, flapping hard, before it dives
+      if (this.t < WINDUP) { b.y -= 0.35 * k; return; }
+      b.x += (vx / d) * 2.5 * k; b.y += (vy / d) * 2.5 * k;
+      if (d < 6 || this.t > WINDUP + 70) { this.state = 'return'; this.t = 0; }
     } else if (this.state === 'return') {
       b.y -= 1.6 * k;
       b.x += this.facing * 0.8 * k;
-      if (b.y + b.h <= this.homeY) { this.state = 'patrol'; this.cool = 140; }
+      if (b.y + b.h <= this.homeY) { this.state = 'patrol'; this.cool = 200; }
     }
   }
 
@@ -220,7 +226,11 @@ export class Enemy {
     }
     ctx.save();
     ctx.globalAlpha *= alpha;
-    if (this.kind === 'pigeon') drawPigeon(ctx, x, b.y + b.h / 2, this.facing, this.t, this.state === 'swoop');
+    if (this.kind === 'pigeon') {
+      const rearing = this.state === 'swoop' && this.t < WINDUP;
+      drawPigeon(ctx, x, b.y + b.h / 2, this.facing, rearing ? this.t * 2.2 : this.t, this.state === 'swoop' && !rearing);
+      if (rearing) drawBang(ctx, x, b.y - 8);
+    }
     else if (this.kind === 'crab') drawCrab(ctx, x, y, this.t, this.state === 'flee');
     else drawFrog(ctx, x, y, this.facing, !this.body.onGround, this.state === 'flee');
     ctx.restore();
@@ -228,6 +238,13 @@ export class Enemy {
 }
 
 function moveBack(b: Body, dx: number): void { b.x += dx; }
+
+/** A little "!" over a bad guy that is about to do something. */
+function drawBang(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  const X = Math.round(x), Y = Math.round(y);
+  ctx.fillStyle = INK; ctx.fillRect(X - 3, Y - 14, 6, 10); ctx.fillRect(X - 3, Y - 2, 6, 5);
+  ctx.fillStyle = '#ffd23f'; ctx.fillRect(X - 2, Y - 13, 4, 8); ctx.fillRect(X - 2, Y - 1, 4, 3);
+}
 
 function drawDizzy(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): void {
   for (let i = 0; i < 3; i++) {
